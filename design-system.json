@@ -1,0 +1,6 @@
+{
+  "name": "Signal / Quiet Utility",
+  "colors": { "primary": "#202426", "ink": "#202426", "paper": "#F5F3EE", "surface": "#FFFFFF", "muted": "#6F7573", "line": "#D9D7D0", "accent": "#C8F169", "accentInk": "#18200E" },
+  "rounded": { "sm": "8px", "md": "14px", "lg": "22px", "pill": "999px" },
+  "spacing": { "xs": "8px", "sm": "12px", "md": "20px", "lg": "32px", "xl": "48px" }
+}
