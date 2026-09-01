@@ -33,4 +33,45 @@ export function validateDesign(system: DesignSystem, page: Page) {
   return { status: errors.length ? "FAILED" : warnings.length ? "WARNING" : "PASSED", errors, warnings, accentContrast: contrast };
 }
 function contrastRatio(a: string, b: string) { const luminance = (hex: string) => { const rgb = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255).map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4); return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]; }; const [one, two] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (one + 0.05) / (two + 0.05); }
+
+// export-html: serializa page.blocks + los tokens del contrato a un documento
+// HTML autocontenido, listo para desplegar (ej. como archivo de Automators).
+// Contenido SIEMPRE escapado -- block.content es texto libre editable por
+// humano y agente, y este HTML termina sirviendose en vivo desde el sitio
+// exportado: sin escape, cualquier bloque es una inyeccion de XSS servida
+// bajo el dominio publicado.
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function toneColor(system: DesignSystem, tone: Block["tone"] | undefined): string {
+  return tone === "muted" ? system.colors.muted : tone === "accent" ? system.colors.accent : system.colors.ink;
+}
+function renderBlock(system: DesignSystem, block: Block): string {
+  const alignStyle = block.align ? ` style="text-align:${block.align}"` : "";
+  const color = toneColor(system, block.tone);
+  if (block.type === "hero") { const lines = block.content.split("\n").map(escapeHtml).join("<br>"); return `<h1${alignStyle} style="color:${color}">${lines}</h1>`; }
+  if (block.type === "text") return `<p${alignStyle} style="color:${color}">${escapeHtml(block.content)}</p>`;
+  if (block.type === "columns") { const items = block.content.split("||").map((item, index) => `<div class="ds-col"><span class="ds-col-index">0${index + 1}</span><span>${escapeHtml(item)}</span></div>`).join(""); return `<div class="ds-columns"${alignStyle}>${items}</div>`; }
+  if (block.type === "button") { const cls = block.tone === "accent" ? "ds-btn-accent" : "ds-btn-primary"; return `<a class="ds-btn ${cls}" href="#">${escapeHtml(block.content)}</a>`; }
+  if (block.type === "divider") return `<hr class="ds-divider">`;
+  if (block.type === "image") return `<div class="ds-image">${escapeHtml(block.content || "Image placeholder")}</div>`;
+  return `<p${alignStyle} style="color:${color}">${escapeHtml(block.content)}</p>`;
+}
+export function renderPageHtml(system: DesignSystem, page: Page): string {
+  const body = page.blocks.map((block) => renderBlock(system, block)).join("\n");
+  const btnPrimary = system.components["button-primary"], btnAccent = system.components["button-accent"], divider = system.components.divider;
+  const css = `:root{--paper:${system.colors.paper};--ink:${system.colors.ink}}` +
+    `*{box-sizing:border-box}body{margin:0;padding:${system.spacing.xl} ${system.spacing.lg};max-width:720px;margin-left:auto;margin-right:auto;background:var(--paper);color:var(--ink);font-family:${system.typography.body.fontFamily};font-size:${system.typography.body.fontSize};font-weight:${system.typography.body.fontWeight};line-height:${system.typography.body.lineHeight}}` +
+    `h1{font-family:${system.typography.display.fontFamily};font-size:${system.typography.display.fontSize};font-weight:${system.typography.display.fontWeight};line-height:${system.typography.display.lineHeight};margin:0 0 ${system.spacing.md}}` +
+    `p{margin:0 0 ${system.spacing.md}}` +
+    `.ds-columns{display:flex;gap:${system.spacing.lg};flex-wrap:wrap;margin:${system.spacing.lg} 0;padding-top:${system.spacing.md};border-top:1px solid ${system.colors.line}}` +
+    `.ds-col{display:flex;flex-direction:column;gap:4px}` +
+    `.ds-col-index{font-family:${system.typography.label.fontFamily};font-size:${system.typography.label.fontSize};font-weight:${system.typography.label.fontWeight};color:${system.colors.muted}}` +
+    `.ds-btn{display:inline-block;text-decoration:none;font-family:${system.typography.body.fontFamily};font-weight:700}` +
+    `.ds-btn-primary{background:${resolveToken(btnPrimary.backgroundColor, system)};color:${resolveToken(btnPrimary.textColor, system)};border-radius:${resolveToken(btnPrimary.rounded, system)};padding:${btnPrimary.padding}}` +
+    `.ds-btn-accent{background:${resolveToken(btnAccent.backgroundColor, system)};color:${resolveToken(btnAccent.textColor, system)};border-radius:${resolveToken(btnAccent.rounded, system)};padding:${btnAccent.padding}}` +
+    `.ds-divider{border:none;border-top:1px solid ${resolveToken(divider.backgroundColor, system)};margin:${system.spacing.lg} 0}` +
+    `.ds-image{background:${system.colors.surface};border:1px dashed ${system.colors.line};border-radius:${system.rounded.md};padding:${system.spacing.xl};text-align:center;color:${system.colors.muted}}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(page.name)}</title><style>${css}</style></head><body>\n${body}\n</body></html>`;
+}
 export function designMarkdown(system: DesignSystem) { const lines = ["---", `name: ${system.name}`, `description: ${system.description}`, "colors:", ...Object.entries(system.colors).map(([key, value]) => `  ${key}: \"${value}\"`), "typography:", ...Object.entries(system.typography).flatMap(([key, value]) => [`  ${key}:`, `    fontFamily: ${value.fontFamily}`, `    fontSize: ${value.fontSize}`, `    fontWeight: ${value.fontWeight}`, `    lineHeight: ${value.lineHeight}`]), "rounded:", ...Object.entries(system.rounded).map(([key, value]) => `  ${key}: ${value}`), "spacing:", ...Object.entries(system.spacing).map(([key, value]) => `  ${key}: ${value}`), "components:", ...Object.entries(system.components).flatMap(([key, values]) => [`  ${key}:`, ...Object.entries(values).map(([name, value]) => `    ${name}: \"${value}\"`)]), "---"]; return `${lines.join("\n")}\n\n## Overview\n\n${system.description}\n\n## Colors\n\nInk and paper form the stable foundation. The accent is reserved for primary actions and agent presence.\n\n## Typography\n\nTypography is compact and utilitarian.\n\n## Layout\n\nUse the spacing scale and avoid arbitrary values.\n\n## Components\n\nComponent entries bridge the editor and generated interfaces.\n\n## Do's and Don'ts\n\n- Do use tokens for color, spacing, radius, and component styling.\n- Don't introduce one-off values without updating the contract.\n`; }
