@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 
 const server = spawn("npm", ["run", "start"], { stdio: "inherit", shell: true });
 const source = new URL("../dist/client/design-studio-webmcp/_next", import.meta.url);
-const output = new URL("../dist/pages/design-studio-webmcp/_next", import.meta.url);
+const output = new URL("../dist/pages/_next", import.meta.url);
 const index = new URL("../dist/pages/index.html", import.meta.url);
 try {
   let html = "";
